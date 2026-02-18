@@ -1,9 +1,10 @@
 """
-最简插件模板 - {{plugin_name}}
-作者：{{author}}
+{{PLUGIN_DISPLAY_NAME}} - 最简骨架插件
 
-这是一个骨架插件，仅包含最基本的结构。
-复制此模板，在 get_plugin_components() 中注册你的组件。
+{{PLUGIN_DESCRIPTION}}
+
+作者：{{PLUGIN_AUTHOR}}
+版本：{{PLUGIN_VERSION}}
 """
 
 from typing import List, Tuple, Type
@@ -16,14 +17,14 @@ from src.plugin_system import (
 )
 from src.common.logger import get_logger
 
-logger = get_logger("{{plugin_name}}")
+logger = get_logger("{{PLUGIN_NAME}}")
 
 
 @register_plugin
-class {{ClassName}}Plugin(BasePlugin):
-    """{{description}}"""
+class {{PLUGIN_CLASS_NAME}}(BasePlugin):
+    """{{PLUGIN_DESCRIPTION}}"""
 
-    plugin_name: str = "{{plugin_name}}"
+    plugin_name: str = "{{PLUGIN_NAME}}"
     enable_plugin: bool = True
     dependencies: List[str] = []
     python_dependencies: List[str] = []
@@ -36,10 +37,10 @@ class {{ClassName}}Plugin(BasePlugin):
     config_schema: dict = {
         "plugin": {
             "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
-            "config_version": ConfigField(type=str, default="1.0.0", description="配置版本"),
+            "config_version": ConfigField(type=str, default="{{PLUGIN_VERSION}}", description="配置版本"),
         },
     }
 
     def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
-        """返回插件组件列表"""
+        """返回插件组件列表（在这里注册你的 Action / Command / Tool）"""
         return []

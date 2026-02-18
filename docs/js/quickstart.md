@@ -1,210 +1,236 @@
-# ⚡ JavaScript 插件快速开始
+# ⚡ JS 插件快速开始
 
-JS Bridge 允许你用 **JavaScript** 编写麦麦插件，无需深入学习 Python 异步编程。
+**JS 桥接插件**允许你用 JavaScript 编写插件逻辑，适合前端开发者或不熟悉 Python 的用户。
 
-## 前置要求
+## 工作原理
 
-- Node.js 14+（用于运行 JS 代码）
-- Python 3.9+（用于 MaiBot 运行环境）
+```
+用户消息 → MaiBot → Python 层（plugin.py）→ Node.js 子进程（plugin.js）→ 执行 JS 逻辑
+                                          ↑
+                                   mai_js_bridge 桥接器
+```
 
-检查 Node.js 是否已安装：
+- **Python 层** (`plugin.py`)：加载 JS 文件，动态生成对应的 MaiBot 组件类
+- **JS 层** (`plugin.js`)：用 `mai.command()` / `mai.action()` 注册逻辑，通过 `ctx` 对象与 MaiBot 交互
+
+## 前置条件
+
+- **Node.js 16+**（必须安装）
+- Python 3.10+
+- MaiBot Plugin Kit
+
 ```bash
+# 检查 Node.js
 node --version
+# 如果未安装，去 https://nodejs.org/ 下载
 ```
 
-## 创建 JS 插件
+---
+
+## 第一步：创建 JS 桥接插件
 
 ```bash
-python -m mai_plugin_cli create my_js_plugin -t js_bridge
+mai create my_js_plugin -t js_bridge -y
 ```
 
-目录结构：
+生成的目录结构：
 ```
 my_js_plugin/
-├── _manifest.json   插件元数据
-├── plugin.py        Python 桥接层（不需要修改）
-├── plugin.js        ⭐ 你的插件逻辑（主要编辑这里）
-└── README.md        说明文档
+├── _manifest.json   ← 插件描述
+├── plugin.py        ← Python 加载器（通常不需要修改）
+└── plugin.js        ← 在这里写你的插件逻辑！
 ```
 
-## 编辑 plugin.js
+---
 
-打开 `plugin.js`，使用 `mai` 全局对象注册你的插件：
+## 第二步：编写 plugin.js
 
-### 注册命令（Command）
+打开 `my_js_plugin/plugin.js`，这里是你真正需要编写的文件：
 
 ```javascript
-// 响应 /ping 命令
+// plugin.js - 你的插件逻辑
+
+// 注册一个命令：/ping
 mai.command({
-  name: "my_ping",
-  description: "测试插件",
-  pattern: /^\/ping$/,
+  name: "ping",
+  description: "测试插件是否正常工作",
+  pattern: /^\/ping$/,    // 正则匹配用户输入
 
   async execute(ctx) {
-    await ctx.sendText("🏓 Pong！插件运行正常！");
-    return { success: true, log: "ping 成功" };
+    await ctx.sendText("Pong! 🏓 JS 插件运行正常！");
+    ctx.log("ping 命令执行成功");
+    return { success: true, log: "pong!" };
   }
 });
-```
 
-### 注册带参数的命令
-
-```javascript
-// 响应 /say 内容
+// 注册一个命令：/roll [数字]（随机骰子）
 mai.command({
-  name: "my_say",
-  description: "让麦麦说话",
-  pattern: /^\/say\s+(.+)$/,  // (.+) 捕获参数
+  name: "roll_dice",
+  description: "掷骰子",
+  pattern: /^\/roll(?:\s+(\d+))?$/,  // 可选参数
 
   async execute(ctx) {
-    const content = ctx.getMatch(1);  // 获取第一个捕获组
-    if (!content) {
-      await ctx.sendText("❌ 用法：/say 你想让我说的话");
-      return { success: false };
-    }
-    await ctx.sendText(content);
+    const maxVal = parseInt(ctx.getMatch(1)) || 6;  // 获取第1个捕获组
+    const result = Math.floor(Math.random() * maxVal) + 1;
+    await ctx.sendText(`🎲 你掷出了 ${result}（1-${maxVal}）`);
     return { success: true };
   }
 });
-```
 
-### 注册 Action（麦麦自主行为）
-
-```javascript
+// 注册一个 Action：麦麦在合适时机自主触发
 mai.action({
-  name: "my_greet",
-  description: "在合适的时机打招呼",
-  
+  name: "send_motivation",
+  description: "发送励志消息",
   require: [
-    "当有新人加入时",
-    "当有人主动打招呼时",
+    "当有人表达沮丧或失落时",
+    "当聊天气氛低落需要鼓励时"
   ],
-  
   parameters: {
-    "user_name": "要打招呼的用户名字",
+    reason: "触发原因",
+    name: "对方的名字（可选）"
   },
-  
   types: ["text"],
 
   async execute(ctx) {
-    const name = ctx.getParam("user_name", "朋友");
-    await ctx.sendText(`你好，${name}！欢迎！😊`);
-    return { success: true, log: `向 ${name} 打招呼` };
+    const name = ctx.getParam("name") || "朋友";
+    const messages = [
+      `加油 ${name}！困难只是暂时的 💪`,
+      `${name}，你已经做得很好了！继续加油！✨`,
+      `相信自己，${name}！每一步都算数！🌟`
+    ];
+    const msg = messages[Math.floor(Math.random() * messages.length)];
+    await ctx.sendText(msg);
+    return { success: true };
   }
 });
 ```
 
-## 可用 API
+---
 
-所有 API 通过 `ctx` 对象访问：
+## 第三步：验证并部署
+
+```bash
+# 验证插件
+mai validate ./my_js_plugin
+
+# 部署到 MaiBot
+cp -r my_js_plugin/ ../MaiBot/plugins/
+# 重启 MaiBot
+```
+
+---
+
+## plugin.js API 参考
+
+所有逻辑写在 `mai.command()` 或 `mai.action()` 的 `execute(ctx)` 函数中。
+
+### `ctx` 上下文对象
+
+#### 发送消息
 
 ```javascript
-// 发送消息
-await ctx.sendText("文本消息");
-await ctx.sendImage("base64字符串");
-await ctx.sendEmoji("base64字符串");
+// 发送文本
+await ctx.sendText("你好！");
 
-// 获取参数（Action 专用）
-const value = ctx.getParam("param_name", "默认值");
+// 发送图片（base64 编码，不含头部）
+await ctx.sendImage("iVBORw0KGgo...");
 
-// 获取正则捕获（Command 专用）
-const match1 = ctx.getMatch(1);  // 第一个捕获组
-const match2 = ctx.getMatch(2);  // 第二个捕获组
-
-// 获取配置
-const msg = ctx.getConfig("section.key", "默认值");
-
-// 输出日志
-ctx.log("这条日志会显示在控制台");
-ctx.logError("这是错误日志");
+// 发送表情包（base64 编码）
+await ctx.sendEmoji("iVBORw0KGgo...");
 ```
+
+#### 获取参数
+
+```javascript
+// Action 参数（LLM 生成的参数）
+const city = ctx.getParam("city");        // 获取指定参数
+const city = ctx.getParam("city", "北京"); // 带默认值
+
+// Command 正则捕获组
+const group1 = ctx.getMatch(1);   // 第 1 个括号里的内容
+const group2 = ctx.getMatch(2);   // 第 2 个括号里的内容
+```
+
+#### 读取配置
+
+```javascript
+// 读取 config.toml 中的配置项
+const msg = ctx.getConfig("command.reply", "默认回复");
+// 支持点号路径，如 "section.key"
+```
+
+#### 日志输出
+
+```javascript
+ctx.log("普通日志");       // 输出到 stderr
+ctx.logError("错误信息");  // 输出到 stderr（标记 ERROR）
+```
+
+#### 其他属性
+
+```javascript
+ctx.stream_id    // 当前聊天流 ID
+ctx.plugin_name  // 插件名称
+```
+
+### `execute` 返回值
+
+```javascript
+return {
+  success: true,    // 是否执行成功
+  log: "描述信息",   // 可选，日志描述
+};
+```
+
+---
+
+## 完整示例：天气查询
+
+```javascript
+// weather.js - 天气查询 JS 插件
+
+mai.command({
+  name: "weather_query",
+  description: "查询天气信息",
+  pattern: /^\/weather\s+(\S+)$/,  // /weather 城市名
+
+  async execute(ctx) {
+    const city = ctx.getMatch(1);
+    if (!city) {
+      await ctx.sendText("用法：/weather 城市名");
+      return { success: false };
+    }
+
+    try {
+      // 动态导入 fetch（Node.js 18+ 内置）
+      const url = `https://wttr.in/${encodeURIComponent(city)}?format=3&lang=zh`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const text = await res.text();
+      await ctx.sendText(`🌤️ ${text.trim()}`);
+      ctx.log(`查询 ${city} 天气成功`);
+      return { success: true };
+    } catch (err) {
+      await ctx.sendText(`❌ 查询失败：${err.message}`);
+      ctx.logError(`天气查询失败：${err.message}`);
+      return { success: false, log: err.message };
+    }
+  }
+});
+```
+
+---
 
 ## 注意事项
 
-::: warning JS 插件的限制
-- JS 插件运行在 Node.js 子进程中，**无法直接访问** MaiBot 内部的数据库和配置
-- 如果需要 HTTP 请求，可以使用 Node.js 内置的 `fetch`（Node.js 18+）或 `require('https')`
-- 每次执行会启动新的 Node.js 进程，性能比 Python 插件略低
-:::
+1. **Node.js 必须安装** 且在 PATH 中可访问（命令行 `node --version` 有输出）
+2. **每次调用都启动新进程**：JS 插件不维持状态，避免用全局变量存储持久数据
+3. **30 秒超时**：如果 JS 执行超过 30 秒会被强制终止
+4. **`require()` 可用**：可以使用 Node.js 内置模块（`path`、`fs` 等）
+5. **不支持 ES Modules**：使用 CommonJS 语法（`require` 而非 `import`）
 
-::: tip 推荐使用场景
-- 简单的命令响应（/help /ping 等）
-- 前端开发者熟悉的 JavaScript 场景
-- 快速原型开发
-:::
+---
 
-## 完整示例
+## 下一步
 
-```javascript
-/**
- * 小工具插件 - JavaScript 版本
- */
-
-// 帮助命令
-mai.command({
-  name: "tools_help",
-  description: "显示帮助信息",
-  pattern: /^\/tools$/,
-
-  async execute(ctx) {
-    await ctx.sendText(
-      "🛠️ 小工具插件\n" +
-      "/tools      - 显示此帮助\n" +
-      "/roll       - 掷骰子\n" +
-      "/flip       - 抛硬币\n" +
-      "/pick A B C - 随机选择"
-    );
-    return { success: true };
-  }
-});
-
-// 掷骰子
-mai.command({
-  name: "tools_roll",
-  description: "掷一个骰子",
-  pattern: /^\/roll$/,
-
-  async execute(ctx) {
-    const result = Math.ceil(Math.random() * 6);
-    const emoji = ["", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"][result];
-    await ctx.sendText(`🎲 掷出了 ${emoji} ${result} 点！`);
-    return { success: true };
-  }
-});
-
-// 抛硬币
-mai.command({
-  name: "tools_flip",
-  description: "抛一枚硬币",
-  pattern: /^\/flip$/,
-
-  async execute(ctx) {
-    const result = Math.random() < 0.5 ? "正面 🪙" : "反面 🔄";
-    await ctx.sendText(`硬币结果：${result}`);
-    return { success: true };
-  }
-});
-
-// 随机选择
-mai.command({
-  name: "tools_pick",
-  description: "从选项中随机选一个",
-  pattern: /^\/pick\s+(.+)$/,
-
-  async execute(ctx) {
-    const input = ctx.getMatch(1);
-    if (!input) {
-      await ctx.sendText("❌ 用法：/pick 选项1 选项2 选项3");
-      return { success: false };
-    }
-    const options = input.trim().split(/\s+/);
-    if (options.length < 2) {
-      await ctx.sendText("❌ 请至少提供 2 个选项");
-      return { success: false };
-    }
-    const chosen = options[Math.floor(Math.random() * options.length)];
-    await ctx.sendText(`🎯 我选择：${chosen}`);
-    return { success: true };
-  }
-});
-```
+- 📖 [JS API 完整参考](/js/api)
+- 🐍 [切换到 Python 插件](/guide/quickstart)（功能更完整）

@@ -1,175 +1,241 @@
-# 📖 JS SDK 参考
+# JS SDK API 参考
 
-`mai-sdk.js` 提供了在 JS 插件中与麦麦交互的完整 API。
+本页面列出 `mai-sdk.js` 提供的所有 API，基于 `mai_js_bridge/sdk/mai-sdk.js` 源码。
 
-## 引入 SDK
+## 注册函数
 
-```javascript
-// 在 plugin.js 中（SDK 由桥接器自动注入到沙箱环境）
-// 直接使用全局 mai 对象即可
-```
+### `mai.command(config)`
 
-## mai 对象 API
-
-### 消息发送
-
-#### `mai.sendText(text)`
-
-发送纯文本消息。
+注册一个命令组件（响应用户输入的特定文本）。
 
 ```javascript
-await mai.sendText("你好！");
+mai.command({
+  name: "ping",                    // 必须：命令唯一名称（英文）
+  description: "测试连接",          // 可选：命令描述（帮助 LLM 理解）
+  pattern: /^\/ping$/,             // 可选：正则表达式（用于匹配用户输入）
+
+  async execute(ctx) {
+    // 你的逻辑
+    return { success: true, log: "可选日志" };
+  }
+});
 ```
 
-#### `mai.sendImage(base64OrUrl)`
-
-发送图片。
-
-```javascript
-await mai.sendImage("https://example.com/image.png");
-// 或 base64 格式
-await mai.sendImage("data:image/png;base64,...");
-```
-
-#### `mai.sendAt(userId, text)`
-
-@某人并附带消息。
-
-```javascript
-await mai.sendAt("123456", "请注意！");
-```
+**注意**：`pattern` 字段用于在桥接层让 Python 动态生成 `command_pattern`。实际匹配由 MaiBot Python 侧完成，`ctx.getMatch()` 返回匹配到的捕获组。
 
 ---
 
-### 消息读取
+### `mai.action(config)`
 
-#### `mai.message`
-
-当前消息对象，包含：
+注册一个行为组件（由麦麦的 LLM 决策系统自主选择触发）。
 
 ```javascript
-{
-  text: "用户发送的消息文本",
-  sender: {
-    id: "123456",
-    name: "用户昵称"
+mai.action({
+  name: "my_action",              // 必须：行为唯一名称（英文）
+  description: "行为的功能描述",   // 可选：LLM 用这个理解何时调用
+  require: [                      // 可选：触发条件列表（LLM 判断依据）
+    "当场景符合时",
+    "避免频繁使用"
+  ],
+  parameters: {                   // 可选：LLM 会传入的参数及说明
+    param_name: "参数描述",
   },
-  groupId: "群号（群聊时）",
-  messageId: "消息ID"
-}
-```
+  types: ["text"],                // 可选：发送的消息类型（默认 ["text"]）
 
-示例：
-
-```javascript
-const text = mai.message.text;
-const senderId = mai.message.sender.id;
-```
-
----
-
-### LLM 接口
-
-#### `mai.callLLM(prompt, options?)`
-
-调用大语言模型生成回复。
-
-```javascript
-const response = await mai.callLLM("帮我写一首关于春天的诗");
-await mai.sendText(response);
-```
-
-选项（options）：
-
-```javascript
-const response = await mai.callLLM("你的问题", {
-  temperature: 0.8,  // 随机性（0-2）
-  maxTokens: 500     // 最大生成长度
+  async execute(ctx) {
+    // 你的逻辑
+    return { success: true };
+  }
 });
 ```
 
 ---
 
-### HTTP 请求
+## `ctx` 上下文对象
 
-#### `mai.fetch(url, options?)`
+在 `execute(ctx)` 函数中使用。
 
-发送 HTTP 请求。
+### 发送消息
+
+#### `ctx.sendText(text)`
+
+发送文本消息。
 
 ```javascript
-// GET 请求
-const data = await mai.fetch("https://api.example.com/data");
+await ctx.sendText("你好！");
+await ctx.sendText(`当前时间：${new Date().toLocaleTimeString()}`);
+```
 
-// POST 请求
-const result = await mai.fetch("https://api.example.com/post", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ key: "value" })
-});
+#### `ctx.sendImage(base64)`
+
+发送图片，内容为不含 `data:image/...;base64,` 头部的 Base64 字符串。
+
+```javascript
+const fs = require('fs');
+const imageData = fs.readFileSync('/path/to/image.png').toString('base64');
+await ctx.sendImage(imageData);
+```
+
+#### `ctx.sendEmoji(base64)`
+
+发送表情包，格式与 `sendImage` 相同。
+
+```javascript
+await ctx.sendEmoji(emojiBase64);
 ```
 
 ---
 
-### 存储
+### 获取数据
 
-#### `mai.store.get(key)`
+#### `ctx.getParam(key, defaultValue?)`
 
-读取持久化数据。
+获取 Action 的 LLM 参数（在 `parameters` 中定义的字段）。
 
 ```javascript
-const count = await mai.store.get("click_count") || 0;
+const city = ctx.getParam("city");           // 没有则返回 null
+const city = ctx.getParam("city", "北京");   // 带默认值
 ```
 
-#### `mai.store.set(key, value)`
+**仅在 Action 中有效。** Command 中无 LLM 参数，请使用 `getMatch()`。
 
-写入持久化数据。
+#### `ctx.getMatch(group)`
+
+获取 Command 正则表达式的捕获组内容（从 1 开始编号）。
 
 ```javascript
-await mai.store.set("click_count", count + 1);
+// pattern: /^\/roll\s+(\d+)$/
+const maxVal = ctx.getMatch(1);   // 获取 (\d+) 匹配到的内容
+```
+
+返回字符串或 `null`（未匹配或不存在）。
+
+**仅在 Command 中有效。**
+
+#### `ctx.getConfig(key, defaultValue?)`
+
+读取插件配置（来自 `config.toml`，需要在 `plugin.py` 中传入）。
+
+```javascript
+const reply = ctx.getConfig("command.reply", "默认回复");
+// key 格式：section.key（对应 config.toml 中的 [section] / key = "value"）
 ```
 
 ---
 
 ### 日志
 
-#### `mai.log(message)`
+#### `ctx.log(message)`
 
-输出日志（会显示在 MaiBot 控制台）。
+输出普通日志（写入 stderr，前缀为 `[JS:插件名]`）。
 
 ```javascript
-mai.log("插件初始化完成");
-mai.log("错误：" + error.message);
+ctx.log("处理完成");
+// 输出：[JS:my_plugin] 处理完成
+```
+
+#### `ctx.logError(message)`
+
+输出错误日志（前缀 `[JS:插件名] ERROR:`）。
+
+```javascript
+ctx.logError("请求失败：timeout");
+// 输出：[JS:my_plugin] ERROR: 请求失败：timeout
 ```
 
 ---
 
-## 完整示例
+### 其他属性
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `ctx.stream_id` | string | 当前聊天流 ID |
+| `ctx.plugin_name` | string | 插件名称（`_manifest.json` 中的 `name`）|
+
+---
+
+## `execute` 返回值
 
 ```javascript
-// plugin.js - 计数器插件
-
-async function onMessage() {
-  const text = mai.message.text.trim();
-  
-  if (text === "/count") {
-    let count = await mai.store.get("count") || 0;
-    count++;
-    await mai.store.set("count", count);
-    await mai.sendText(`已被触发 ${count} 次 🔢`);
-    return true;
-  }
-  
-  if (text === "/reset") {
-    await mai.store.set("count", 0);
-    await mai.sendText("计数已重置 ✅");
-    return true;
-  }
-  
-  return false;
-}
+return {
+  success: true,     // 必须：是否执行成功
+  log: "日志信息",   // 可选：日志描述
+};
 ```
 
-## 下一步
+如果执行过程中 JS 抛出未捕获的异常，桥接器会自动返回 `{ success: false, log: 错误信息 }`。
 
-- ⚡ 回到 [JS 插件快速开始](/js/quickstart)
-- 📖 了解 [插件架构](/guide/architecture)
+---
+
+## 完整模板
+
+```javascript
+// plugin.js 完整模板
+
+// ── 命令示例 ──────────────────────────────────────────────────────────
+mai.command({
+  name: "my_command",
+  description: "命令功能描述",
+  pattern: /^\/my_command(?:\s+(.+))?$/,
+
+  async execute(ctx) {
+    const arg = ctx.getMatch(1);    // 获取可选参数
+    const config = ctx.getConfig("command.reply", "默认回复");
+
+    try {
+      if (arg) {
+        await ctx.sendText(`你输入了：${arg}`);
+      } else {
+        await ctx.sendText(config);
+      }
+      ctx.log("命令执行成功");
+      return { success: true, log: "success" };
+    } catch (err) {
+      ctx.logError(`执行失败：${err.message}`);
+      await ctx.sendText("❌ 执行出错，请稍后重试");
+      return { success: false, log: err.message };
+    }
+  }
+});
+
+
+// ── Action 示例 ──────────────────────────────────────────────────────
+mai.action({
+  name: "my_action",
+  description: "行为功能描述，让 LLM 知道何时使用",
+  require: [
+    "当场景合适时使用",
+    "不要频繁触发",
+  ],
+  parameters: {
+    content: "要发送的内容",
+    reason: "触发原因",
+  },
+  types: ["text"],
+
+  async execute(ctx) {
+    const content = ctx.getParam("content", "Hello!");
+
+    try {
+      await ctx.sendText(content);
+      ctx.log("Action 执行成功");
+      return { success: true };
+    } catch (err) {
+      ctx.logError(err.message);
+      return { success: false, log: err.message };
+    }
+  }
+});
+```
+
+---
+
+## 限制与注意事项
+
+| 项目 | 说明 |
+|------|------|
+| **执行超时** | 每次调用最多 30 秒，超时强制终止 |
+| **模块系统** | 使用 CommonJS（`require`）而非 ES Modules（`import`）|
+| **无状态** | 每次调用启动新进程，全局变量不跨调用保留 |
+| **标准输入输出** | 不要向 `stdout` 直接打印，结果通过 return 返回；日志用 `ctx.log()` 写到 stderr |
+| **Node.js 版本** | 建议 Node.js 18+（内置 `fetch`）；16+ 基础功能可用 |

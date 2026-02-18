@@ -184,6 +184,8 @@ def cmd_create(args):
         "{{ACTION_CLASS_NAME}}": class_prefix + "Action",
         "{{COMMAND_CLASS_NAME}}": class_prefix + "Command",
         "{{TOOL_CLASS_NAME}}": class_prefix + "Tool",
+        "{{HANDLER_CLASS_NAME}}": class_prefix + "EventHandler",
+        "{{START_HANDLER_CLASS_NAME}}": class_prefix + "StartHandler",
     }
 
     # 递归替换所有文本文件中的模板变量
