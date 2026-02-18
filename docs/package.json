@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "MaiBot Plugin Kit 文档站点",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",
