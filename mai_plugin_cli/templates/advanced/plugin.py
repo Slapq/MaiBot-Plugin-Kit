@@ -37,11 +37,11 @@ class {{COMMAND_CLASS_NAME}}(BaseCommand):
     """
     command_name = "{{PLUGIN_NAME}}_ask"
     command_description = "使用自定义提示词直接调用 LLM"
-    command_pattern = r"^/{{PLUGIN_NAME}}\s+ask\s+(.+)$"
+    command_pattern = r"^/{{PLUGIN_NAME}}\s+ask\s+(?P<question>.+)$"
 
     async def execute(self) -> Tuple[bool, Optional[str], bool]:
-        # 获取用户输入的问题
-        question = self.matched.group(1) if self.matched else ""
+        # 使用命名捕获组（文档确认 matched_groups = re.match.groupdict()）
+        question = self.matched_groups.get("question", "")
         if not question:
             await self.send_text("❌ 用法：/{{PLUGIN_NAME}} ask 你的问题")
             return False, "缺少问题", True
@@ -76,10 +76,10 @@ class {{COMMAND_CLASS_NAME}}Rewrite(BaseCommand):
     """
     command_name = "{{PLUGIN_NAME}}_rewrite"
     command_description = "将文本重写成麦麦的口吻"
-    command_pattern = r"^/{{PLUGIN_NAME}}\s+rewrite\s+(.+)$"
+    command_pattern = r"^/{{PLUGIN_NAME}}\s+rewrite\s+(?P<raw_text>.+)$"
 
     async def execute(self) -> Tuple[bool, Optional[str], bool]:
-        raw_text = self.matched.group(1) if self.matched else ""
+        raw_text = self.matched_groups.get("raw_text", "")
         if not raw_text:
             await self.send_text("❌ 用法：/{{PLUGIN_NAME}} rewrite 要改写的内容")
             return False, "缺少内容", True
@@ -218,7 +218,6 @@ class {{ACTION_CLASS_NAME}}DirectLLM(BaseAction):
             return False, "缺少任务描述"
 
         from mai_advanced import PromptModifier
-        from src.plugin_system.apis import send_api
 
         modifier = PromptModifier(self)
 
@@ -233,16 +232,17 @@ class {{ACTION_CLASS_NAME}}DirectLLM(BaseAction):
 
 任务：{task}"""
 
+        # call_model 不自动发送；用 self.send_text() 发送（BaseAction 内置方法）
         ok, result = await modifier.call_model(
             prompt=prompt,
             temperature=0.3,   # 低温度 = 更确定性的输出
         )
 
         if ok and result:
-            await send_api.text_to_stream(result, self.stream_id)
+            await self.send_text(result)
             return True, "直接 LLM 调用完成"
         else:
-            await send_api.text_to_stream("❌ 生成失败，请稍后重试", self.stream_id)
+            await self.send_text("❌ 生成失败，请稍后重试")
             return False, "LLM 调用失败"
 
 
