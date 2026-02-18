@@ -1,0 +1,30 @@
+{
+  "manifest_version": 1,
+  "name": "Test Cmd Plugin",
+  "version": "2.0.0",
+  "description": "测试命令插件",
+  "author": {
+    "name": "测试者"
+  },
+  "license": "MIT",
+  "host_application": {
+    "min_version": "0.7.0"
+  },
+  "keywords": [
+    "command"
+  ],
+  "categories": [
+    "Utility Tools"
+  ],
+  "plugin_info": {
+    "is_built_in": false,
+    "plugin_type": "general",
+    "components": [
+      {
+        "type": "command",
+        "name": "test_cmd_plugin_command",
+        "description": "测试命令插件"
+      }
+    ]
+  }
+}

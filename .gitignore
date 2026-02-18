@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# 测试临时文件
+_test_*.txt
+_verify_*.txt
+_adv_test_out.txt
+_verify_out.txt
+test_minimal_auto/
+test_action_auto/
+test_command_auto/
+test_full_auto/
+test_js_bridge_auto/
+_test_bad_plugin/
+_test_maiscript_out/
+_test_adv_plugin/
+
+# 打包输出
+*.zip
+!test_cmd_plugin-v2.0.0.zip
+
+# 示例生成的测试插件（保留作示例）
+# test_hello/
+# test_cmd_plugin/
+# test_action_plugin/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/

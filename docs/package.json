@@ -1,0 +1,14 @@
+{
+  "name": "maibot-plugin-kit-docs",
+  "version": "1.0.0",
+  "description": "MaiBot Plugin Kit 文档站点",
+  "private": true,
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.0.0"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "manifest_version": 1,
+  "name": "{{PLUGIN_DISPLAY_NAME}}",
+  "version": "{{PLUGIN_VERSION}}",
+  "description": "使用高级 API 的麦麦插件（自定义提示词 + 回复注入）",
+  "author": {
+    "name": "{{PLUGIN_AUTHOR}}"
+  },
+  "license": "MIT",
+  "homepage_url": "",
+  "repository_url": "",
+  "host_application": {
+    "min_version": "0.8.0"
+  },
+  "keywords": ["advanced", "custom-prompt", "reply-injection"],
+  "categories": ["Other"],
+  "plugin_info": {
+    "is_built_in": false,
+    "plugin_type": "general",
+    "components": [
+      {
+        "type": "command",
+        "name": "{{PLUGIN_NAME}}_ask",
+        "description": "使用自定义提示词让麦麦回答问题"
+      },
+      {
+        "type": "action",
+        "name": "{{PLUGIN_NAME}}_inject",
+        "description": "在正常回复中注入额外内容的演示 Action"
+      }
+    ]
+  }
+}
