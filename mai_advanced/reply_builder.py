@@ -104,11 +104,33 @@ class AdvancedReplyBuilder:
 
     @property
     def _stream_id(self) -> str:
-        return self._comp.stream_id
+        """
+        返回当前聊天流 ID。
+        BaseAction → self.chat_id（文档确认）
+        BaseCommand → self.chat_id 或 self.stream_id（兼容两种写法）
+        """
+        for attr in ("stream_id", "chat_id"):
+            v = getattr(self._comp, attr, None)
+            if v:
+                return v
+        return ""
 
     @property
     def _chat_stream(self):
-        return getattr(self._comp.message, "chat_stream", None)
+        """
+        返回 ChatStream 对象。
+        BaseAction  → self.chat_stream（文档：直接属性）
+        BaseCommand → self.message.chat_stream（hello_world 示例用法）
+        """
+        # 优先尝试直接属性（BaseAction）
+        cs = getattr(self._comp, "chat_stream", None)
+        if cs is not None:
+            return cs
+        # 兜底：通过 message 对象（BaseCommand）
+        msg = getattr(self._comp, "message", None)
+        if msg is not None:
+            return getattr(msg, "chat_stream", None)
+        return None
 
     # ── 1. 生成正常回复（可附加内容）────────────────────────────────────────────
 
