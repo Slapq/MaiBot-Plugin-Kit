@@ -71,11 +71,11 @@ class {{ACTION_CLASS_NAME}}(BaseAction):
         常用属性：
             self.action_data      : LLM 传入的参数字典
             self.user_nickname    : 触发者昵称
-            self.group_id         : 群号
+            self.group_id         : 群号（群聊时有效）
             self.user_id          : 用户 QQ 号
             self.chat_stream      : ChatStream 对象
             self.is_group         : 是否群聊
-            self.stream_id        : 聊天流 ID
+            self.chat_id          : 聊天流 ID（即 stream_id，用于 send_api 等）
 
         常用方法：
             await self.send_text(content)

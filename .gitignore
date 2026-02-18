@@ -63,5 +63,7 @@ docs/.vitepress/dist/
 
 .git_disabled/
 
-# 临时辅助脚本
+# 临时辅助脚本（排除 __ 开头，但保留 __test_all.py / __final.py 等正式文件）
 __*.py
+!__test_all.py
+!__final.py
