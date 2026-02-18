@@ -40,7 +40,15 @@ def _has_node() -> bool:
 
 def _parse_js_registrations(js_content: str) -> Dict[str, List[Dict]]:
     """
-    解析 JS 文件中的 mai.command() 和 mai.action() 注册信息。
+    解析 JS 文件中所有 mai.reply() / mai.command() / mai.action() 注册信息。
+
+    支持所有写法：
+      mai.reply('/ping', 'Pong!')                    → auto_reply_0
+      mai.reply('/ping', 'Pong!', 'ping_cmd')        → ping_cmd
+      mai.command(/pattern/, async (ctx) => { ... }) → auto_cmd_0
+      mai.command({ name: 'roll', ... })             → roll
+      mai.command(async (ctx) => { ... })            → auto_cmd_N (catch-all)
+      mai.action({ name: 'greet', ... })             → greet
 
     返回格式：
     {
@@ -49,28 +57,109 @@ def _parse_js_registrations(js_content: str) -> Dict[str, List[Dict]]:
     }
     """
     registrations = {"commands": [], "actions": []}
+    _auto_cmd_idx = [0]
+    _auto_reply_idx = [0]
 
-    cmd_pattern = re.finditer(
+    # ── 1. mai.reply(pattern, text) 或 mai.reply(pattern, text, name) ─────────
+    for m in re.finditer(
+        r'mai\.reply\s*\(\s*'
+        r'(["\'/][^,]+?)'          # 第一参数：pattern（字符串/正则）
+        r'\s*,\s*'
+        r'(["\'][^"\']*["\'])'     # 第二参数：reply 文本
+        r'(?:\s*,\s*(["\']([^"\']+)["\']))?'  # 可选第三参数：name
+        r'\s*\)',
+        js_content,
+    ):
+        pattern_raw = m.group(1).strip()
+        reply_text  = m.group(2).strip().strip('"\'')
+        explicit_name = m.group(4)
+
+        if explicit_name:
+            name = explicit_name
+        else:
+            name = f"auto_reply_{_auto_reply_idx[0]}"
+            _auto_reply_idx[0] += 1
+
+        # 提取正则
+        if pattern_raw.startswith('/'):
+            pat = re.search(r'^/(.+?)/([gimsuy]*)$', pattern_raw)
+            pattern_str = pat.group(1) if pat else pattern_raw[1:-1]
+        else:
+            pattern_str = re.escape(pattern_raw.strip('"\''))
+
+        registrations["commands"].append({
+            "name": name,
+            "description": f"固定回复：{reply_text[:30]}",
+            "pattern": pattern_str,
+            "_reply_text": reply_text,
+            "_is_simple_reply": True,
+        })
+
+    # ── 2. mai.command({ name: ..., ... }) 对象配置写法 ────────────────────────
+    for m in re.finditer(
         r'mai\.command\s*\(\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}',
         js_content,
         re.DOTALL,
-    )
-    for m in cmd_pattern:
+    ):
         block = m.group(1)
         cmd_info = _extract_object_fields(block)
         if cmd_info.get("name"):
             registrations["commands"].append(cmd_info)
 
-    act_pattern = re.finditer(
+    # ── 3. mai.command(pattern, fn) 简洁写法（箭头函数） ─────────────────────
+    # 注意：正则字面量内可能含 \/ 转义斜杠，用 (?:[^/\\]|\\.)+ 匹配
+    for m in re.finditer(
+        r'mai\.command\s*\(\s*'
+        r'(/(?:[^/\\]|\\.)+/[gimsuy]*'     # /regex/flags  支持内部 \/
+        r'|"[^"]+"|\'[^\']+\')'            # 或普通字符串
+        r'\s*,\s*(?:async\s+)?\(',
+        js_content,
+    ):
+        pattern_raw = m.group(1).strip()
+        if pattern_raw.startswith('/'):
+            # 提取最后一个未转义的 / 之前的内容
+            pat = re.search(r'^/((?:[^/\\]|\\.)+)/([gimsuy]*)$', pattern_raw)
+            pattern_str = pat.group(1) if pat else pattern_raw[1:-1]
+        else:
+            pattern_str = pattern_raw.strip('"\'')
+
+        name = f"auto_cmd_{_auto_cmd_idx[0]}"
+        _auto_cmd_idx[0] += 1
+        registrations["commands"].append({
+            "name": name,
+            "description": f"命令：{pattern_str[:40]}",
+            "pattern": pattern_str,
+        })
+
+    # ── 4. mai.command(fn) catch-all 写法 ─────────────────────────────────────
+    for m in re.finditer(
+        r'mai\.command\s*\(\s*(?:async\s+)?\(ctx\)',
+        js_content,
+    ):
+        name = f"auto_cmd_{_auto_cmd_idx[0]}"
+        _auto_cmd_idx[0] += 1
+        registrations["commands"].append({
+            "name": name,
+            "description": "catch-all 命令",
+            "pattern": r"^.*$",
+        })
+
+    # ── 5. mai.action({ name: ..., ... }) 对象配置写法 ────────────────────────
+    for m in re.finditer(
         r'mai\.action\s*\(\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}',
         js_content,
         re.DOTALL,
-    )
-    for m in act_pattern:
+    ):
         block = m.group(1)
         act_info = _extract_object_fields(block)
         if act_info.get("name"):
             registrations["actions"].append(act_info)
+
+    # 去重（同名组件只保留最后一个）
+    seen = {}
+    for cmd in registrations["commands"]:
+        seen[cmd["name"]] = cmd
+    registrations["commands"] = list(seen.values())
 
     return registrations
 
@@ -259,8 +348,6 @@ class JsBridgeLoader:
                 BaseAction,
                 BaseCommand,
                 ActionActivationType,
-                ActionInfo,
-                CommandInfo,
             )
         except ImportError:
             logger.error("[JsBridge] 无法导入 src.plugin_system，请确保在 MaiBot 目录内运行")
@@ -270,18 +357,18 @@ class JsBridgeLoader:
         components = []
 
         for cmd_info in regs.get("commands", []):
-            component_class = self._make_command_class(cmd_info, BaseCommand, CommandInfo)
+            component_class = self._make_command_class(cmd_info, BaseCommand)
             if component_class:
                 components.append((component_class.get_command_info(), component_class))
 
         for act_info in regs.get("actions", []):
-            component_class = self._make_action_class(act_info, BaseAction, ActionActivationType, ActionInfo)
+            component_class = self._make_action_class(act_info, BaseAction, ActionActivationType)
             if component_class:
                 components.append((component_class.get_action_info(), component_class))
 
         return components
 
-    def _make_command_class(self, cmd_info: Dict, BaseCommand, CommandInfo) -> Optional[Type]:
+    def _make_command_class(self, cmd_info: Dict, BaseCommand) -> Optional[Type]:
         """动态生成 Command 类"""
         js_file = self.js_file
         plugin_name = self.plugin_name
@@ -311,9 +398,9 @@ class JsBridgeLoader:
                     groups = list(self.matched.groups())
                     context_data["matched_groups"] = groups
 
-                from src.plugin_system import send_api
+                from src.plugin_system.apis import send_api
 
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None,
                     lambda: _run_js_execute(js_file, name, context_data),
                 )
@@ -336,7 +423,7 @@ class JsBridgeLoader:
         DynamicJsCommand.__qualname__ = f"JsCommand_{name}"
         return DynamicJsCommand
 
-    def _make_action_class(self, act_info: Dict, BaseAction, ActionActivationType, ActionInfo) -> Optional[Type]:
+    def _make_action_class(self, act_info: Dict, BaseAction, ActionActivationType) -> Optional[Type]:
         """动态生成 Action 类"""
         js_file = self.js_file
         plugin_name = self.plugin_name
@@ -362,9 +449,9 @@ class JsBridgeLoader:
                     "action_data": self.action_data,
                 }
 
-                from src.plugin_system import send_api
+                from src.plugin_system.apis import send_api
 
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None,
                     lambda: _run_js_execute(js_file, name, context_data),
                 )
