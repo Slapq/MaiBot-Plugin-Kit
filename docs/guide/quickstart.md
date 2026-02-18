@@ -1,142 +1,256 @@
-# 🚀 快速开始指南
+# 🚀 快速开始
 
-本指南将帮助你在 **5 分钟内**创建并运行你的第一个 MaiBot 插件。
+本指南将带你用真实可运行的代码创建第一个 MaiBot 插件。
 
 ## 前置条件
 
-- Python 3.9+
-- 已安装并运行中的 MaiBot（v0.7.0+）
-- 基本的命令行操作能力
+- **Python 3.10+**（MaiBot 要求）
+- 已克隆并运行 [MaiBot](https://github.com/Mai-with-u/MaiBot)
+- 了解基本 Python 语法
 
-## 安装脚手架
+## 插件放置位置
 
-将 `MaiBot-Plugin-Kit` 克隆或下载到本地：
-
-```bash
-git clone https://github.com/your-repo/MaiBot-Plugin-Kit.git
-cd MaiBot-Plugin-Kit
-```
-
-> 💡 也可以直接将 `mai_plugin_cli`、`mai_js_bridge`、`mai_script` 目录复制到你的工作目录中使用。
-
-## 创建第一个插件
-
-### 方式一：交互式创建（推荐）
-
-```bash
-python -m mai_plugin_cli create my_first_plugin
-```
-
-然后按提示选择模板和填写信息：
+将你的插件目录放入 MaiBot 根目录的 `plugins/` 文件夹：
 
 ```
-📦 请选择插件模板：
-
-  [1] 🔹 Minimal（最简模板）
-       最小化插件骨架，只有必要的结构，适合从零手写
-       技术要求：Python 基础
-
-  [2] 🎭 Action（行为插件）
-       让麦麦拥有新的自主行为
-       技术要求：Python + 异步基础
-
-  [3] 💻 Command（命令插件）
-       响应固定命令（如 /ping /weather）
-       技术要求：Python 基础
-
-  [4] 🌟 Full（完整功能插件）
-       包含所有组件类型的完整示例
-       技术要求：Python 进阶
-
-  [5] ⚡ JS Bridge（JS 轻量插件）
-       使用 JavaScript 编写插件逻辑
-       技术要求：JavaScript 基础
-
-请输入序号 (1-5): 3
+MaiBot/
+├── bot.py
+├── plugins/
+│   ├── __init__.py
+│   └── my_first_plugin/    ← 你的插件在这里
+│       ├── _manifest.json
+│       └── plugin.py
 ```
 
-### 方式二：直接指定模板
+## 最简插件（5 分钟上手）
 
-```bash
-# Command 插件（响应 /ping 等命令）
-python -m mai_plugin_cli create ping_plugin -t command
+### 第一步：创建 `_manifest.json`
 
-# Action 插件（麦麦自主行为）
-python -m mai_plugin_cli create weather_action -t action --author "你的名字"
-
-# JS 插件（JavaScript 编写）
-python -m mai_plugin_cli create js_plugin -t js_bridge
+```json
+{
+  "manifest_version": 1,
+  "name": "我的第一个插件",
+  "version": "1.0.0",
+  "description": "Hello World 插件",
+  "author": {
+    "name": "你的名字"
+  }
+}
 ```
 
-## 目录结构说明
-
-创建后的目录结构（以 `command` 模板为例）：
-
-```
-my_first_plugin/
-├── _manifest.json    ← 插件元数据（必须）
-├── plugin.py         ← 插件主文件（在此编写逻辑）
-└── README.md         ← 插件说明文档
-```
-
-## 编写插件逻辑
-
-打开 `plugin.py`，找到 `execute()` 方法，修改你的逻辑：
+### 第二步：创建 `plugin.py`
 
 ```python
-async def execute(self) -> Tuple[bool, Optional[str], bool]:
-    # 获取用户输入的参数（如果有的话）
-    param = self.matched.group(1) if self.matched else None
-    
-    if param == "hello":
-        await self.send_text("👋 你好！")
-    else:
-        await self.send_text(f"✅ 收到了命令！参数：{param or '无'}")
-    
-    return True, "执行成功", True
+from typing import List, Tuple, Type
+
+from src.plugin_system import (
+    BasePlugin,
+    register_plugin,
+    ComponentInfo,
+    ConfigField,
+)
+
+@register_plugin
+class MyFirstPlugin(BasePlugin):
+    """我的第一个 MaiBot 插件"""
+
+    plugin_name: str = "my_first_plugin"
+    enable_plugin: bool = True
+    dependencies: List[str] = []
+    python_dependencies: List[str] = []
+    config_file_name: str = "config.toml"
+    config_schema: dict = {}
+
+    def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
+        return []
 ```
 
-## 安装插件到 MaiBot
-
-将插件目录复制到 MaiBot 的 `plugins/` 目录：
+### 第三步：启动 MaiBot
 
 ```bash
-# Windows
-xcopy /E /I my_first_plugin "C:\MaiBot\plugins\my_first_plugin"
-
-# Linux/Mac
-cp -r my_first_plugin /path/to/MaiBot/plugins/
+python bot.py
 ```
 
-然后**重启 MaiBot**，插件就会自动加载。
+日志中看到插件加载成功即完成 🎉
 
-## 验证插件
+---
 
-```bash
-python -m mai_plugin_cli validate ./my_first_plugin
+## 添加 Command（响应命令）
+
+用户输入 `/hello` 时，麦麦立即回复：
+
+```python
+import datetime
+from typing import List, Optional, Tuple, Type
+
+from src.plugin_system import (
+    BasePlugin, register_plugin,
+    BaseCommand, ComponentInfo, ConfigField,
+)
+from src.common.logger import get_logger
+
+logger = get_logger("my_plugin")
+
+
+class HelloCommand(BaseCommand):
+    """响应 /hello 命令"""
+
+    command_name = "hello"
+    command_description = "打招呼命令"
+    command_pattern = r"^/hello$"          # 精确匹配
+
+    async def execute(self) -> Tuple[bool, Optional[str], bool]:
+        await self.send_text("你好！😊")
+        # 返回 (成功, 日志, 是否拦截后续处理)
+        return True, "打招呼成功", True
+
+
+class TimeCommand(BaseCommand):
+    """响应 /time 命令"""
+
+    command_name = "time"
+    command_description = "查询当前时间"
+    command_pattern = r"^/time$"
+
+    async def execute(self) -> Tuple[bool, Optional[str], bool]:
+        fmt = self.get_config("time.format", "%Y-%m-%d %H:%M:%S")
+        now = datetime.datetime.now().strftime(fmt)
+        await self.send_text(f"⏰ 当前时间：{now}")
+        return True, f"时间: {now}", True
+
+
+@register_plugin
+class MyPlugin(BasePlugin):
+
+    plugin_name: str = "my_plugin"
+    enable_plugin: bool = True
+    dependencies: List[str] = []
+    python_dependencies: List[str] = []
+    config_file_name: str = "config.toml"
+
+    config_schema: dict = {
+        "time": {
+            "format": ConfigField(type=str, default="%Y-%m-%d %H:%M:%S", description="时间格式"),
+        },
+    }
+
+    def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
+        return [
+            (HelloCommand.get_command_info(), HelloCommand),
+            (TimeCommand.get_command_info(), TimeCommand),
+        ]
 ```
 
-输出示例：
+---
+
+## 添加 Action（麦麦主动触发）
+
+Action 由麦麦的决策系统自主判断是否使用，无需用户输入命令：
+
+```python
+from src.plugin_system import (
+    BasePlugin, register_plugin,
+    BaseAction, ComponentInfo, ConfigField,
+    ActionActivationType,
+)
+
+class GreetAction(BaseAction):
+    """问候 Action"""
+
+    action_name = "my_greet"
+    action_description = "向用户发送友好问候"
+
+    # 激活方式：ALWAYS(始终) / RANDOM(随机) / KEYWORD(关键词) / NEVER(禁用)
+    activation_type = ActionActivationType.KEYWORD
+    activation_keywords = ["你好", "hello", "hi"]
+    keyword_case_sensitive = False
+
+    # 帮助 LLM 判断何时选用此 Action
+    action_require = [
+        "当有人主动打招呼时使用",
+        "不要连续使用",
+    ]
+    associated_types = ["text"]
+    action_parameters = {
+        "greeting": "要发送的问候语",
+    }
+
+    async def execute(self) -> Tuple[bool, str]:
+        greeting = self.action_data.get("greeting", "你好！")
+        await self.send_text(greeting)
+        return True, "问候成功"
 ```
-🔍 正在验证插件：/path/to/my_first_plugin
 
-📂 检查文件结构...
-  ✅ _manifest.json
-  ✅ plugin.py
+---
 
-📋 检查 manifest.json...
-  ✅ manifest_version = 1
-  ✅ name = My First Plugin
-  ✅ version = 1.0.0
-  ...
+## 带参数的命令
 
-==================================================
-✅ 验证通过！共 2 个警告
+使用命名捕获组 `(?P<参数名>正则)` 提取参数：
+
+```python
+class WeatherCommand(BaseCommand):
+    command_name = "weather"
+    command_description = "查询天气"
+    # 匹配：/weather 北京
+    command_pattern = r"^/weather\s+(?P<city>\S+)$"
+
+    async def execute(self) -> Tuple[bool, Optional[str], bool]:
+        city = self.matched_groups.get("city", "")
+        await self.send_text(f"查询 {city} 的天气中...")
+        return True, f"查询城市: {city}", True
 ```
+
+---
+
+## 配置文件
+
+在插件类中定义 `config_schema`，MaiBot 会自动生成 `config.toml`：
+
+```python
+from src.plugin_system import ConfigField
+
+config_schema = {
+    "plugin": {
+        "enabled": ConfigField(type=bool, default=True, description="是否启用"),
+    },
+    "greeting": {
+        "message": ConfigField(type=str, default="你好！", description="问候语"),
+        "use_emoji": ConfigField(type=bool, default=True, description="是否使用表情"),
+    },
+}
+```
+
+在组件中通过 `self.get_config("section.key", 默认值)` 读取：
+
+```python
+message = self.get_config("greeting.message", "你好！")
+```
+
+> ⚠️ **不要手动创建 config.toml！** 让 MaiBot 自动生成。
+
+---
+
+## 消息类型
+
+`associated_types` 和 `send_type()` 支持的消息类型（依赖 Adapter 支持）：
+
+| 类型 | 说明 | 内容格式 |
+|------|------|---------|
+| `text` | 文本 | 字符串 |
+| `emoji` | 表情包 | base64（无头） |
+| `image` | 图片 | base64（无头） |
+| `reply` | 回复 | 消息 ID |
+| `voice` | 语音 | wav base64 |
+| `voiceurl` | 语音 URL | URL 字符串 |
+| `music` | 网易云音乐 | 音乐 ID |
+| `videourl` | 视频 URL | URL 字符串 |
+| `file` | 文件 | 文件路径 |
+
+---
 
 ## 下一步
 
-- 📖 了解 [插件架构](/guide/architecture)
-- 📤 查看 [发送 API 文档](/api/send_api)
-- 🤖 学习如何使用 [LLM API](/api/llm_api)
-- ✨ 尝试 [MaiScript 零代码开发](/maiscript/intro)
+- 🏗️ [插件架构详解](/guide/architecture)
+- 📤 [发送 API](/api/send_api)
+- 🤖 [LLM API](/api/llm_api)
+- ✨ [MaiScript 零代码开发](/maiscript/intro)

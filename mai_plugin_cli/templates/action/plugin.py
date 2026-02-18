@@ -1,185 +1,144 @@
 """
-{{PLUGIN_DISPLAY_NAME}} - Action 类型麦麦插件
+Action 插件模板 - {{plugin_name}}
+作者：{{author}}
 
-Action 是麦麦的自主行为。当 LLM 判断需要这个行为时，会自动调用它。
-例如：天气查询、发表情、搜索信息、播放音乐等。
-
-使用场景：
-  - 随机化的互动行为
-  - 情绪和表情表达
-  - 根据上下文自动触发
-  - 增强麦麦的智能行为
-
-作者：{{PLUGIN_AUTHOR}}
-版本：{{PLUGIN_VERSION}}
+Action 由麦麦的决策系统自主选择是否使用，不需要用户明确输入命令。
+适合：主动问候、情绪反应、主动分享内容、添加表情包等场景。
 """
 
-from typing import List, Tuple, Type, Optional
+from typing import List, Tuple, Type
+
 from src.plugin_system import (
     BasePlugin,
     register_plugin,
     BaseAction,
     ComponentInfo,
     ActionActivationType,
-    ChatMode,
     ConfigField,
 )
+from src.common.logger import get_logger
+
+logger = get_logger("{{plugin_name}}")
 
 
-# =============================================================================
-# Action 组件定义
-# =============================================================================
-
-
-class {{ACTION_CLASS_NAME}}(BaseAction):
+class {{ClassName}}Action(BaseAction):
     """
-    {{PLUGIN_DISPLAY_NAME}} 的核心 Action 组件。
-    
-    Action 的工作流程：
-    1. LLM 决策：根据 action_require 和 action_description 判断是否使用
-    2. 参数提取：LLM 从对话中提取 action_parameters 中定义的参数
-    3. 执行：调用 execute() 方法，可在此做任何事情
+    Action 组件 - 在合适的时机由麦麦自主触发
+
+    activation_type 控制此 Action 何时进入决策候选池：
+    - ActionActivationType.ALWAYS   : 始终在候选池中（核心功能用）
+    - ActionActivationType.RANDOM   : 按概率进入候选池（需设置 random_activation_probability）
+    - ActionActivationType.KEYWORD  : 检测到关键词时进入（需设置 activation_keywords）
+    - ActionActivationType.NEVER    : 永不激活（调试/禁用用）
     """
 
-    # ===== 必填：Action 基本信息 =====
-    action_name = "{{PLUGIN_NAME}}_action"
-    action_description = "{{PLUGIN_DESCRIPTION}}"
+    # ── 基本信息（必须填写）──────────────────────────────
+    action_name = "{{plugin_name}}_action"
+    action_description = "{{description}}"
 
-    # 激活类型：
-    #   ALWAYS    - 始终可用（推荐）
-    #   RANDOM    - 随机激活（适合随机事件）
-    #   KEYBOARD  - 需要特定触发词
-    activation_type = ActionActivationType.ALWAYS
+    # ── 激活配置 ─────────────────────────────────────────
+    activation_type = ActionActivationType.RANDOM
+    random_activation_probability = 0.3      # RANDOM 模式：30% 概率进入候选池
 
-    # 聊天模式限制（可选）：
-    #   GROUP_CHAT  - 仅群聊
-    #   PRIVATE_CHAT - 仅私聊
-    #   UNIVERSAL   - 两者都支持（默认）
-    # 取消注释来限制模式：
-    # mode = ChatMode.GROUP_CHAT
+    # activation_type = ActionActivationType.KEYWORD
+    # activation_keywords = ["关键词1", "关键词2"]
+    # keyword_case_sensitive = False
 
-    # ===== 必填：LLM 提示配置 =====
-    # LLM 执行时会传入的参数（LLM 从对话中提取这些参数的值）
-    action_parameters = {
-        "reason": "执行此动作的原因（简短描述）",
-        # 可以添加更多参数，例如：
-        # "target_user": "目标用户的名字（如果有）",
-        # "message_content": "要发送的消息内容",
-    }
-
-    # LLM 判断使用此 Action 的条件描述（越具体越准确）
+    # ── 使用场景描述（帮助 LLM 决定何时选用此 Action）────
     action_require = [
-        "当需要执行 {{PLUGIN_DISPLAY_NAME}} 相关操作时",
-        "当用户请求与 {{PLUGIN_NAME}} 相关的功能时",
-        # 可以添加更多条件，例如：
-        # "当用户说'帮我查查天气'时",
-        # "当需要发送一个表情包时",
+        "在合适的场景使用",   # ← 根据你的插件功能修改这里
+        "不要频繁使用",
     ]
 
-    # 关联的消息类型（告诉 LLM 这个 Action 会产生什么类型的回复）
-    # 可选值：["text", "image", "emoji", "voice", "video"]
+    # ── 此 Action 会发送哪些类型的消息 ────────────────────
+    # 可选: "text" "emoji" "image" "reply" "voice" "command"
+    #       "voiceurl" "music" "videourl" "file"
     associated_types = ["text"]
 
-    # ===== 可选：随机激活概率（activation_type = RANDOM 时有效）=====
-    # default_enable_ratio = 0.3  # 30% 的概率激活
+    # ── LLM 调用此 Action 时会传入的参数 ──────────────────
+    # LLM 会根据描述生成参数值，存入 self.action_data
+    action_parameters = {
+        "content": "要发送的内容",
+    }
 
-    # =============================================================================
-    # 核心执行逻辑
-    # =============================================================================
+    # ── 是否允许与其他 Action 并行执行 ────────────────────
+    parallel_action = False
 
     async def execute(self) -> Tuple[bool, str]:
         """
-        Action 的核心执行方法。
-        
+        Action 核心执行逻辑
+
         可用属性：
-            self.action_data     - LLM 提取的参数字典（如 action_parameters 中定义的）
-            self.chat_stream     - 当前聊天流对象
-            self.stream_id       - 当前聊天流 ID（用于发送消息）
-            self.message_id      - 触发消息的 ID
-        
+            self.action_data      : LLM 传入的参数字典
+            self.group_id         : 群号
+            self.user_id          : 触发者 QQ 号
+            self.user_nickname    : 触发者昵称
+            self.platform         : 平台（如 "qq"）
+            self.chat_id          : 聊天流 ID
+            self.chat_stream      : ChatStream 对象
+            self.is_group         : 是否群聊
+            self.thinking_id      : 本次思考 ID
+            self.action_message   : 完整的消息数据字典
+
         可用方法：
-            self.send_text(text)                 - 发送文本消息
-            self.send_image(base64_str)           - 发送图片（base64 格式）
-            self.send_emoji(base64_str)           - 发送表情包（base64 格式）
-            self.send_custom(type, data)          - 发送自定义类型消息
-            self.get_config(key, default)         - 读取配置值
-            self.get_recent_messages(n)           - 获取最近 n 条消息
-            self.generate_reply(extra_info)       - 使用麦麦的风格化生成器生成回复
-        
-        返回值：
-            (True, "成功描述")   - 执行成功
-            (False, "失败原因")  - 执行失败
+            await self.send_text(content, reply_to="", typing=False)
+            await self.send_emoji(emoji_base64)
+            await self.send_image(image_base64)
+            await self.send_custom(message_type, content)
+            await self.send_command(command_name, args={})
+            await self.store_action_info(action_build_into_prompt=True, action_prompt_display="...", action_done=True)
+            self.get_config("section.key", default_value)
+
+        返回：
+            Tuple[bool, str]  →  (是否成功, 日志描述)
         """
-        # ===== 获取 LLM 传入的参数 =====
-        reason = self.action_data.get("reason", "")
+        # 从 LLM 传入的参数中获取值
+        content = self.action_data.get("content", "")
 
-        # ===== 读取配置（如果有的话）=====
-        # greeting_msg = self.get_config("messages.greeting", "你好！")
+        # 从配置文件读取
+        message_template = self.get_config("action.message", "{{description}}")
 
-        # ===== 在此编写你的核心逻辑 =====
-        try:
-            # 示例：发送文本消息
-            reply_text = f"{{PLUGIN_DISPLAY_NAME}} 执行成功！原因：{reason}"
-            await self.send_text(reply_text)
+        logger.info(f"[{{plugin_name}}] Action 执行，user={self.user_nickname}")
 
-            # 示例：发送图片
-            # import base64
-            # with open("image.png", "rb") as f:
-            #     img_base64 = base64.b64encode(f.read()).decode()
-            # await self.send_image(img_base64)
+        # 发送文本消息
+        await self.send_text(message_template)
 
-            # 示例：使用麦麦风格生成器（rewrite_reply）
-            # from src.plugin_system.apis import generator_api
-            # success, reply_set, _ = await generator_api.rewrite_reply(
-            #     chat_stream=self.message.chat_stream,
-            #     raw_reply=f"用户需要：{reason}",
-            #     reason="根据用户需求生成回复",
-            # )
-            # if success:
-            #     for reply_type, reply_content in reply_set:
-            #         if reply_type == "text":
-            #             await self.send_text(reply_content)
+        # 将此次行为写入提示词上下文（可选）
+        await self.store_action_info(
+            action_build_into_prompt=True,
+            action_prompt_display=f"执行了 {{plugin_name}} 动作",
+            action_done=True,
+        )
 
-            return True, f"{{PLUGIN_DISPLAY_NAME}} 执行成功"
-
-        except Exception as e:
-            self.logger.error(f"[{{PLUGIN_CLASS_NAME}}] 执行失败：{e}")
-            return False, f"执行失败：{str(e)}"
-
-
-# =============================================================================
-# 插件主类
-# =============================================================================
+        return True, "执行成功"
 
 
 @register_plugin
-class {{PLUGIN_CLASS_NAME}}(BasePlugin):
-    """{{PLUGIN_DISPLAY_NAME}} 插件主类"""
+class {{ClassName}}Plugin(BasePlugin):
+    """{{description}}"""
 
-    plugin_name = "{{PLUGIN_NAME}}"
-    enable_plugin = True
+    plugin_name: str = "{{plugin_name}}"
+    enable_plugin: bool = True
     dependencies: List[str] = []
     python_dependencies: List[str] = []
-    config_file_name = "config.toml"
+    config_file_name: str = "config.toml"
 
-    # ===== 配置文件定义（可选）=====
-    # 取消注释并修改来添加配置项
-    # config_schema: dict = {
-    #     "plugin": {
-    #         "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
-    #     },
-    #     "messages": {
-    #         "greeting": ConfigField(
-    #             type=str,
-    #             default="你好！",
-    #             description="问候语"
-    #         ),
-    #     },
-    # }
-    config_schema: dict = {}
+    config_section_descriptions = {
+        "plugin": "插件基本配置",
+        "action": "Action 行为配置",
+    }
+
+    config_schema: dict = {
+        "plugin": {
+            "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
+            "config_version": ConfigField(type=str, default="1.0.0", description="配置版本"),
+        },
+        "action": {
+            "message": ConfigField(type=str, default="{{description}}", description="Action 发送的消息模板"),
+        },
+    }
 
     def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
-        """注册插件包含的组件"""
         return [
-            ({{ACTION_CLASS_NAME}}.get_action_info(), {{ACTION_CLASS_NAME}}),
+            ({{ClassName}}Action.get_action_info(), {{ClassName}}Action),
         ]

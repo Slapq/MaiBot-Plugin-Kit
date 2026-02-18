@@ -1,210 +1,178 @@
 # 📤 发送 API
 
-`send_api` 模块负责向聊天流发送各种类型的消息。
+> **来源**：`src.plugin_system.apis.send_api`
+
+发送 API 负责向聊天流发送各种类型的消息。
 
 ## 导入方式
 
 ```python
+# 在插件组件外部使用（独立调用）
 from src.plugin_system import send_api
-```
-
-在 Action/Command 组件内部，可以直接使用 `self.send_text()` 等便捷方法。
-
----
-
-## 函数参考
-
-### `text_to_stream()`
-
-向指定聊天流发送文本消息。
-
-```python
-async def text_to_stream(
-    text: str,
-    stream_id: str,
-    typing: bool = False,
-    set_reply: bool = False,
-    reply_message: Optional[DatabaseMessages] = None,
-    storage_message: bool = True,
-) -> bool
-```
-
-**参数：**
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `text` | `str` | 必填 | 要发送的文本内容 |
-| `stream_id` | `str` | 必填 | 聊天流 ID（在组件中用 `self.stream_id`） |
-| `typing` | `bool` | `False` | 是否模拟打字延迟 |
-| `set_reply` | `bool` | `False` | 是否引用回复某条消息 |
-| `reply_message` | `DatabaseMessages \| None` | `None` | 要引用的消息对象 |
-| `storage_message` | `bool` | `True` | 是否将消息存入数据库 |
-
-**返回值：** `bool` —— 发送是否成功
-
-**示例：**
-
-```python
-# 在 Action/Command 中
-async def execute(self):
-    await self.send_text("你好！")  # 简写方式
-
-# 或者直接调用 API
-await send_api.text_to_stream("你好！", self.stream_id)
-
-# 带打字效果
-await send_api.text_to_stream("正在思考...", self.stream_id, typing=True)
-```
-
----
-
-### `image_to_stream()`
-
-向指定聊天流发送图片。
-
-```python
-async def image_to_stream(
-    image_base64: str,
-    stream_id: str,
-    storage_message: bool = True,
-    set_reply: bool = False,
-    reply_message: Optional[DatabaseMessages] = None,
-) -> bool
-```
-
-**参数：**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `image_base64` | `str` | 图片的 base64 编码字符串 |
-| `stream_id` | `str` | 聊天流 ID |
-
-**示例：**
-
-```python
-import base64
-
-# 从文件读取图片
-with open("image.png", "rb") as f:
-    img_base64 = base64.b64encode(f.read()).decode("utf-8")
-
-await self.send_image(img_base64)  # 简写方式
 # 或
-await send_api.image_to_stream(img_base64, self.stream_id)
+from src.plugin_system.apis import send_api
+```
+
+在 `BaseAction` / `BaseCommand` 组件内部，直接调用 `self.send_*()` 系列方法即可，无需导入。
+
+---
+
+## 组件内置发送方法（推荐）
+
+### BaseAction 可用方法
+
+```python
+# 发送文本（typing=True 会显示"正在输入"）
+await self.send_text(content: str, reply_to: str = "", reply_to_platform_id: str = "", typing: bool = False) -> bool
+
+# 发送表情包（base64 无头格式）
+await self.send_emoji(emoji_base64: str) -> bool
+
+# 发送图片（base64 无头格式）
+await self.send_image(image_base64: str) -> bool
+
+# 发送自定义消息类型
+await self.send_custom(message_type: str, content: str, typing: bool = False, reply_to: str = "") -> bool
+
+# 发送命令消息（用于控制 Adapter）
+await self.send_command(command_name: str, args: dict = None, display_message: str = "", storage_message: bool = True) -> bool
+```
+
+### BaseCommand 可用方法
+
+```python
+# 发送文本
+await self.send_text(content: str, reply_to: str = "") -> bool
+
+# 发送表情包
+await self.send_emoji(emoji_base64: str) -> bool
+
+# 发送图片
+await self.send_image(image_base64: str) -> bool
+
+# 发送指定类型消息
+await self.send_type(message_type: str, content: str, display_message: str = "", typing: bool = False, reply_to: str = "") -> bool
+
+# 发送命令消息
+await self.send_command(command_name: str, args: dict = None, display_message: str = "", storage_message: bool = True) -> bool
+
+# 合并转发（发送多条消息合并为一个）
+await self.send_forward(messages: list) -> bool
+```
+
+#### `send_forward` 消息格式
+
+```python
+from src.plugin_system import ReplyContentType
+
+# 每条消息格式：(QQ号字符串, 昵称字符串, [(ReplyContentType.类型, 内容)])
+await self.send_forward([
+    ("10001", "用户A", [(ReplyContentType.TEXT, "消息1")]),
+    ("10002", "用户B", [(ReplyContentType.IMAGE, image_base64)]),
+])
 ```
 
 ---
 
-### `emoji_to_stream()`
-
-向指定聊天流发送表情包。
+## 直接调用 send_api（不在组件内）
 
 ```python
-async def emoji_to_stream(
-    emoji_base64: str,
-    stream_id: str,
-    storage_message: bool = True,
+from src.plugin_system import send_api
+
+# 发送文本到指定聊天流
+await send_api.text_to_stream(
+    text="Hello!",
+    stream_id=chat_stream.stream_id,
+    typing=False,
+    reply_to="",          # 格式："发送者:消息内容"
+    storage_message=True,
+) -> bool
+
+# 发送表情包
+await send_api.emoji_to_stream(
+    emoji_base64="...",
+    stream_id=chat_stream.stream_id,
+    storage_message=True,
+) -> bool
+
+# 发送图片
+await send_api.image_to_stream(
+    image_base64="...",
+    stream_id=chat_stream.stream_id,
+    storage_message=True,
+) -> bool
+
+# 发送自定义类型消息
+await send_api.custom_to_stream(
+    message_type="text",  # "text"/"emoji"/"image"/"voice"/"command"/"music" 等
+    content="内容",
+    stream_id=chat_stream.stream_id,
+    display_message="",
+    typing=False,
+    reply_to="",
+    storage_message=True,
+    show_log=True,
 ) -> bool
 ```
 
-**示例：**
+---
 
-```python
-# 使用 emoji_api 选择随机表情包
-from src.plugin_system import emoji_api
+## 支持的消息类型
 
-emoji_base64 = await emoji_api.get_random_emoji()
-if emoji_base64:
-    await self.send_emoji(emoji_base64)
-```
+| 类型 | 说明 | 内容格式 |
+|------|------|---------|
+| `text` | 文本消息 | 字符串 |
+| `emoji` | 表情包 | base64 无头字符串 |
+| `image` | 图片 | base64 无头字符串 |
+| `reply` | 回复特定消息 | 消息 ID |
+| `voice` | 语音（wav） | base64 无头字符串 |
+| `voiceurl` | 语音 URL | URL 字符串 |
+| `music` | 网易云音乐 | 音乐 ID |
+| `videourl` | 视频 URL | URL 字符串 |
+| `file` | 文件 | 文件路径 |
+| `command` | 命令（控制 Adapter） | 命令字典 |
+
+> ⚠️ 不同 Adapter 支持的消息类型可能不同。以 MaiBot-NapCat-Adapter 为准。
 
 ---
 
-### `custom_to_stream()`
+## 实战示例
 
-发送自定义类型消息（支持任意消息类型）。
-
-```python
-async def custom_to_stream(
-    message_type: str,
-    content: str | Dict,
-    stream_id: str,
-    display_message: str = "",
-    typing: bool = False,
-    storage_message: bool = True,
-) -> bool
-```
-
-**参数：**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `message_type` | `str` | 消息类型（`"text"`, `"image"`, `"voice"`, `"video"` 等） |
-| `content` | `str \| Dict` | 消息内容 |
-
-**示例：**
+### 发送带表情的文字
 
 ```python
-# 发送语音消息（base64）
-await send_api.custom_to_stream("voice", voice_base64, self.stream_id)
+async def execute(self) -> Tuple[bool, str]:
+    from src.plugin_system import emoji_api
 
-# 发送视频消息
-await send_api.custom_to_stream("video", video_base64, self.stream_id)
+    # 随机获取一个表情包
+    result = await emoji_api.get_random()
+    if result:
+        emoji_b64, desc, emotion = result[0]
+        await self.send_emoji(emoji_b64)
+
+    await self.send_text("今天天气不错！😊")
+    return True, "发送成功"
 ```
 
----
-
-### `custom_reply_set_to_stream()`
-
-发送由 `ReplySetModel` 构成的混合消息集（通常由生成器 API 返回）。
+### 回复指定消息
 
 ```python
-async def custom_reply_set_to_stream(
-    reply_set: ReplySetModel,
-    stream_id: str,
-    typing: bool = False,
-    storage_message: bool = True,
-) -> bool
+async def execute(self) -> Tuple[bool, Optional[str], bool]:
+    # reply_to 格式："发送者名字:消息内容"
+    await self.send_text("收到！", reply_to="用户:你好")
+    return True, "回复成功", True
 ```
 
-**示例：**
+### 合并转发多张图片
 
 ```python
-from src.plugin_system import generator_api, send_api
+from src.plugin_system import ReplyContentType, emoji_api
 
-# 使用麦麦风格生成器生成回复
-success, llm_data = await generator_api.generate_reply(
-    chat_id=self.stream_id,
-    extra_info="请用开心的语气回复",
-)
-if success and llm_data and llm_data.reply_set:
-    await send_api.custom_reply_set_to_stream(
-        llm_data.reply_set, self.stream_id
-    )
+async def execute(self) -> Tuple[bool, Optional[str], bool]:
+    emojis = await emoji_api.get_random(5)
+    images = [(ReplyContentType.IMAGE, e[0]) for e in emojis]
+    success = await self.send_forward([
+        ("0", "神秘用户", images)
+    ])
+    return (True, "已发送", True) if success else (False, "失败", False)
 ```
-
----
-
-## 组件内便捷方法
-
-在 `BaseAction` 和 `BaseCommand` 中，以下方法是对 `send_api` 的封装：
-
-| 便捷方法 | 等同于 |
-|---------|--------|
-| `await self.send_text(text)` | `send_api.text_to_stream(text, self.stream_id)` |
-| `await self.send_image(base64)` | `send_api.image_to_stream(base64, self.stream_id)` |
-| `await self.send_emoji(base64)` | `send_api.emoji_to_stream(base64, self.stream_id)` |
-
-## 常见问题
-
-::: tip 如何发送多条消息？
-直接多次调用 `send_text` 即可，消息会依次发送：
-```python
-await self.send_text("第一条消息")
-await self.send_text("第二条消息")
-```
-:::
-
-::: warning 图片格式
-发送图片时必须是 base64 编码的字符串，不要包含 `data:image/png;base64,` 前缀。
-:::

@@ -1,189 +1,117 @@
 # 🤖 LLM API
 
-`llm_api` 模块提供与大语言模型（LLM）直接交互的能力。
+> **来源**：`src.plugin_system.apis.llm_api`
+
+LLM API 提供直接调用大语言模型的能力（不走麦麦的回复生成器，直接裸调）。
 
 ## 导入方式
 
 ```python
 from src.plugin_system import llm_api
+# 或
+from src.plugin_system.apis import llm_api
 ```
 
 ---
 
-## 函数参考
+## 主要功能
 
-### `get_available_models()`
-
-获取所有在 MaiBot 配置文件中定义的可用模型配置。
+### 1. 查询可用模型
 
 ```python
-def get_available_models() -> Dict[str, TaskConfig]
+models = llm_api.get_available_models()
+# 返回：Dict[str, TaskConfig]
+# key 为模型名称，value 为 TaskConfig 对象
 ```
 
-**返回值：** 模型名称到 `TaskConfig` 的字典
-
-**示例：**
+### 2. 用模型生成内容
 
 ```python
-models = llm_api.get_available_models()
-for name, config in models.items():
-    print(f"模型: {name}")
+success, content, reasoning, model_name = await llm_api.generate_with_model(
+    prompt="你的提示词",
+    model_config=models["model_name"],   # 从 get_available_models() 获取
+    request_type="plugin.generate",      # 可选，用于日志记录
+    temperature=0.8,                     # 可选，影响随机性（0~2）
+    max_tokens=500,                      # 可选，最大生成 token 数
+)
+# 返回：Tuple[bool, str, str, str]
+# → (是否成功, 生成内容, 推理过程, 实际使用的模型名)
+```
 
-# 获取特定模型配置
-models = llm_api.get_available_models()
-my_model = models.get("utils")  # 使用 utils 任务的模型
+### 3. 带 Tool 的生成
+
+```python
+from src.plugin_system import tool_api
+
+tools = tool_api.get_llm_available_tool_definitions()
+
+success, content, reasoning, model_name, tool_calls = await llm_api.generate_with_model_with_tools(
+    prompt="你的提示词",
+    model_config=models["model_name"],
+    tool_options=tools,                  # 传入工具列表
+    request_type="plugin.generate",
+    temperature=0.8,
+    max_tokens=500,
+)
+# 返回：Tuple[bool, str, str, str, List[ToolCall] | None]
 ```
 
 ---
 
-### `generate_with_model()`
-
-使用指定模型生成文本内容。
+## 完整示例
 
 ```python
-async def generate_with_model(
-    prompt: str,
-    model_config: TaskConfig,
-    request_type: str = "plugin.generate",
-    temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
-) -> Tuple[bool, str, str, str]
-```
+from src.plugin_system import (
+    BaseCommand, ComponentInfo, ConfigField,
+    llm_api,
+)
+from src.common.logger import get_logger
 
-**参数：**
+logger = get_logger("my_llm_plugin")
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `prompt` | `str` | 提示词 |
-| `model_config` | `TaskConfig` | 模型配置（从 `get_available_models()` 获取） |
-| `request_type` | `str` | 请求类型标识（用于日志记录） |
-| `temperature` | `float \| None` | 温度参数（控制随机性，0-2） |
-| `max_tokens` | `int \| None` | 最大 token 数 |
 
-**返回值：** `(成功, 生成内容, 推理过程, 模型名称)`
+class AskCommand(BaseCommand):
+    command_name = "ask"
+    command_description = "向 AI 提问"
+    command_pattern = r"^/ask\s+(?P<question>.+)$"
 
-**示例：**
+    async def execute(self):
+        question = self.matched_groups.get("question", "")
+        if not question:
+            await self.send_text("请输入问题，例如：/ask 什么是黑洞？")
+            return True, "无问题", True
 
-```python
-from src.plugin_system import llm_api
+        # 获取可用模型
+        models = llm_api.get_available_models()
+        if not models:
+            await self.send_text("暂无可用模型")
+            return False, "无模型", True
 
-# 获取可用模型
-models = llm_api.get_available_models()
-model = models.get("utils")  # 或其他模型名
+        model_config = list(models.values())[0]  # 使用第一个模型
 
-if model:
-    success, content, reasoning, model_name = await llm_api.generate_with_model(
-        prompt="请用一句话介绍你自己",
-        model_config=model,
-    )
-    if success:
-        await self.send_text(content)
-```
+        # 调用 LLM
+        success, content, reasoning, model_name = await llm_api.generate_with_model(
+            prompt=f"请简洁回答：{question}",
+            model_config=model_config,
+            request_type="plugin.ask",
+            temperature=0.7,
+            max_tokens=300,
+        )
 
----
+        if success and content:
+            await self.send_text(content)
+            logger.info(f"[ask] 使用模型 {model_name} 回答了：{question}")
+        else:
+            await self.send_text("抱歉，生成回答失败了 😅")
 
-### `generate_with_model_with_tools()`
-
-使用模型和工具调用生成内容（支持 Function Calling）。
-
-```python
-async def generate_with_model_with_tools(
-    prompt: str,
-    model_config: TaskConfig,
-    tool_options: List[Dict[str, Any]] | None = None,
-    request_type: str = "plugin.generate",
-    temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
-) -> Tuple[bool, str, str, str, List[ToolCall] | None]
-```
-
-**返回值：** `(成功, 生成内容, 推理过程, 模型名称, 工具调用列表)`
-
-**示例：**
-
-```python
-# 定义工具
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "description": "获取指定城市的天气信息",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "城市名称"
-                    }
-                },
-                "required": ["city"]
-            }
-        }
-    }
-]
-
-models = llm_api.get_available_models()
-model = models.get("utils")
-
-success, content, reasoning, model_name, tool_calls = \
-    await llm_api.generate_with_model_with_tools(
-        prompt="上海今天天气怎么样？",
-        model_config=model,
-        tool_options=tools,
-    )
-
-if tool_calls:
-    for call in tool_calls:
-        print(f"工具调用：{call.function.name}({call.function.arguments})")
+        return True, f"回答了问题：{question}", True
 ```
 
 ---
 
-## 实用示例
+## 注意事项
 
-### 翻译功能
-
-```python
-async def execute(self):
-    text = self.action_data.get("text", "")
-    
-    models = llm_api.get_available_models()
-    model = models.get("utils")
-    if not model:
-        await self.send_text("❌ 模型不可用")
-        return False, "模型不可用"
-    
-    success, result, _, _ = await llm_api.generate_with_model(
-        prompt=f"请将以下文本翻译成英文，只返回翻译结果：\n{text}",
-        model_config=model,
-    )
-    
-    if success:
-        await self.send_text(f"翻译结果：{result}")
-    return success, "翻译完成"
-```
-
-### 内容审核
-
-```python
-async def execute(self):
-    message = self.action_data.get("message", "")
-    
-    models = llm_api.get_available_models()
-    model = models.get("utils")
-    
-    success, result, _, _ = await llm_api.generate_with_model(
-        prompt=f"判断以下内容是否含有不当信息，只回答'是'或'否'：\n{message}",
-        model_config=model,
-        temperature=0.1,  # 低温度，更确定性的回答
-    )
-    
-    is_inappropriate = success and "是" in result
-    return True, f"审核完成：{'不当' if is_inappropriate else '正常'}"
-```
-
-::: tip 何时使用 LLM API vs 生成器 API？
-- **LLM API**：直接调用模型，完全控制 prompt，适合翻译、分析、判断等结构化任务
-- **生成器 API**：使用麦麦的风格化生成器，回复更拟人化，适合麦麦对话回复
-:::
+- 每次调用都会消耗 API Token，注意控制频率
+- `request_type` 用于日志分析，建议填写有意义的字符串
+- 模型列表由 MaiBot 配置文件决定，插件无法直接指定模型名称（需从 `get_available_models()` 获取）
+- 与 `generator_api` 的区别：`llm_api` 是裸调 LLM，不考虑上下文；`generator_api` 是完整的回复生成流程，包含上下文、人设等

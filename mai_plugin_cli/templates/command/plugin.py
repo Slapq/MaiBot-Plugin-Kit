@@ -1,21 +1,13 @@
 """
-{{PLUGIN_DISPLAY_NAME}} - Command 类型麦麦插件
+Command 插件模板 - {{plugin_name}}
+作者：{{author}}
 
-Command 响应用户输入的固定命令（通过正则表达式匹配）。
-无需 LLM 参与，精确触发，适合管理类/功能类命令。
-
-使用场景：
-  - /ping、/help、/status 等管理命令
-  - /weather 上海 等带参数的查询命令
-  - 需要精确控制触发条件的场景
-
-作者：{{PLUGIN_AUTHOR}}
-版本：{{PLUGIN_VERSION}}
+Command 在用户输入匹配正则表达式时立即触发，是确定性的被动响应。
+适合：/help /ping /天气 城市 等明确命令。
 """
 
 import re
-import datetime
-from typing import List, Tuple, Type, Optional
+from typing import List, Optional, Tuple, Type
 
 from src.plugin_system import (
     BasePlugin,
@@ -24,114 +16,99 @@ from src.plugin_system import (
     ComponentInfo,
     ConfigField,
 )
+from src.common.logger import get_logger
+
+logger = get_logger("{{plugin_name}}")
 
 
-# =============================================================================
-# Command 组件定义
-# =============================================================================
-
-
-class {{COMMAND_CLASS_NAME}}(BaseCommand):
+class {{ClassName}}Command(BaseCommand):
     """
-    {{PLUGIN_DISPLAY_NAME}} 的核心 Command 组件。
-    
-    Command 的工作流程：
-    1. 消息匹配：使用 command_pattern 正则表达式匹配用户消息
-    2. 参数提取：通过正则捕获组提取参数
-    3. 执行：调用 execute() 方法
+    Command 组件 - 响应用户输入的特定命令
+
+    command_pattern 使用 Python 正则表达式。
+    若需提取参数，使用命名捕获组：(?P<参数名>匹配规则)
+    匹配结果存入 self.matched_groups 字典。
+
+    示例：
+        command_pattern = r"^/{{plugin_name}}\\s+(?P<param>\\S+)$"
+        # 用户输入 /myplugin hello → self.matched_groups["param"] == "hello"
     """
 
-    # ===== 必填：Command 基本信息 =====
-    command_name = "{{PLUGIN_NAME}}_command"
-    command_description = "{{PLUGIN_DESCRIPTION}}"
+    command_name = "{{plugin_name}}"
+    command_description = "{{description}}"
 
-    # 匹配用户消息的正则表达式
-    # 示例：
-    #   r"^/ping$"                    - 精确匹配 "/ping"
-    #   r"^/weather\s+(.+)$"          - 匹配 "/weather 城市名"，捕获城市名
-    #   r"^/(help|h|\?)$"             - 匹配多种形式的帮助命令
-    #   r"^/calc\s+(\d+)\s*([+\-*/])\s*(\d+)$"  - 匹配 "/calc 1 + 2"
-    command_pattern = r"^/{{PLUGIN_NAME}}(?:\s+(.+))?$"
+    # 正则表达式：精确匹配 /{{plugin_name}} 命令（不带参数）
+    command_pattern = r"^/{{plugin_name}}$"
 
-    # ===== 可选配置 =====
-    # 是否在私聊中也有效（默认 True）
-    # intercept_in_private = True
-    
-    # 是否在群聊中有效（默认 True）
-    # intercept_in_group = True
-
-    # =============================================================================
-    # 核心执行逻辑
-    # =============================================================================
+    # 带参数版本（取消注释以使用）：
+    # command_pattern = r"^/{{plugin_name}}(?:\s+(?P<param>.+))?$"
 
     async def execute(self) -> Tuple[bool, Optional[str], bool]:
         """
-        Command 的核心执行方法。
-        
+        Command 核心执行逻辑
+
         可用属性：
-            self.matched           - 正则匹配结果对象（re.Match）
-            self.params            - 捕获组列表（匹配到的参数）
-            self.raw_message       - 用户原始消息文本
-            self.chat_stream       - 当前聊天流对象
-            self.stream_id         - 当前聊天流 ID
-            self.sender_name       - 发送者昵称
-            self.sender_id         - 发送者 ID
-        
+            self.matched_groups         : 正则命名捕获组字典
+            self.message.raw_message    : 用户原始消息文本
+            self.message.chat_stream    : ChatStream 对象
+            self.message.stream_id      : 当前聊天流 ID
+            self.message.plain_text     : 消息纯文本
+            self.message.message_segment: 消息段（含图片/表情等）
+
         可用方法：
-            self.send_text(text)                - 发送文本
-            self.send_image(base64_str)          - 发送图片
-            self.get_config(key, default)        - 读取配置值
-        
-        返回值：
-            (True, "日志信息", True)   - 成功，第三个参数表示是否阦截后续处理
-            (False, "错误信息", True)  - 失败
+            await self.send_text(content, reply_to="")
+            await self.send_emoji(emoji_base64)
+            await self.send_image(image_base64)
+            await self.send_type(message_type, content)
+            await self.send_command(command_name, args={})
+            await self.send_forward(messages_list)
+            self.get_config("section.key", default_value)
+
+        返回：
+            Tuple[bool, Optional[str], bool]
+                → (是否成功, 日志描述, 是否拦截后续处理)
+            第三个值为 True 时，麦麦不会继续处理这条消息（推荐命令插件设为 True）
         """
-        # ===== 提取正则捕获的参数 =====
-        # 如果正则有捕获组，可以通过 self.matched.group(1) 等方式获取
-        param = None
-        if self.matched:
-            param = self.matched.group(1)  # 捕获第一个参数（如果有）
+        # 读取命名捕获组参数（如果有）
+        # param = self.matched_groups.get("param", "")
 
-        # ===== 在此编写你的核心逻辑 =====
-        try:
-            if param:
-                # 有参数时的处理
-                response = f"收到参数：{param}"
-            else:
-                # 无参数时的处理（或显示帮助）
-                response = (
-                    f"✅ {{PLUGIN_DISPLAY_NAME}} 正在运行！\n"
-                    f"📌 用法：/{{PLUGIN_NAME}} [参数]\n"
-                    f"🕒 当前时间：{datetime.datetime.now().strftime('%H:%M:%S')}"
-                )
+        # 从配置读取
+        reply_message = self.get_config("command.reply", "收到命令！")
 
-            await self.send_text(response)
-            return True, f"{{PLUGIN_NAME}} 命令执行成功", True
+        logger.info(f"[{{plugin_name}}] Command 触发，stream={self.message.stream_id}")
 
-        except Exception as e:
-            self.logger.error(f"[{{PLUGIN_CLASS_NAME}}] 执行失败：{e}")
-            await self.send_text(f"❌ 执行失败：{str(e)}")
-            return False, f"执行失败：{str(e)}", True
+        await self.send_text(reply_message)
 
-
-# =============================================================================
-# 插件主类
-# =============================================================================
+        # 返回 (成功, 日志, 是否拦截)
+        return True, "命令执行成功", True
 
 
 @register_plugin
-class {{PLUGIN_CLASS_NAME}}(BasePlugin):
-    """{{PLUGIN_DISPLAY_NAME}} 插件主类"""
+class {{ClassName}}Plugin(BasePlugin):
+    """{{description}}"""
 
-    plugin_name = "{{PLUGIN_NAME}}"
-    enable_plugin = True
+    plugin_name: str = "{{plugin_name}}"
+    enable_plugin: bool = True
     dependencies: List[str] = []
     python_dependencies: List[str] = []
-    config_file_name = "config.toml"
-    config_schema: dict = {}
+    config_file_name: str = "config.toml"
+
+    config_section_descriptions = {
+        "plugin": "插件基本配置",
+        "command": "命令响应配置",
+    }
+
+    config_schema: dict = {
+        "plugin": {
+            "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
+            "config_version": ConfigField(type=str, default="1.0.0", description="配置版本"),
+        },
+        "command": {
+            "reply": ConfigField(type=str, default="收到命令！", description="命令回复内容"),
+        },
+    }
 
     def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
-        """注册插件包含的组件"""
         return [
-            ({{COMMAND_CLASS_NAME}}.get_command_info(), {{COMMAND_CLASS_NAME}}),
+            ({{ClassName}}Command.get_command_info(), {{ClassName}}Command),
         ]
