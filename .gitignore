@@ -62,3 +62,6 @@ docs/.vitepress/cache/
 docs/.vitepress/dist/
 
 .git_disabled/
+
+# 临时辅助脚本
+__*.py
