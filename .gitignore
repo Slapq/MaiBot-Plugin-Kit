@@ -11,11 +11,15 @@ build/
 .eggs/
 *.whl
 
-# 测试临时文件
+# 测试临时文件（内部用，不上传）
+_test_*.py
+_verify_*.py
 _test_*.txt
 _verify_*.txt
 _adv_test_out.txt
 _verify_out.txt
+
+# 临时生成的插件目录
 test_minimal_auto/
 test_action_auto/
 test_command_auto/
@@ -25,14 +29,17 @@ _test_bad_plugin/
 _test_maiscript_out/
 _test_adv_plugin/
 
+# 生成脚本（内部用）
+_git_push.bat
+_do_commit.bat
+*.bat
+
 # 打包输出
 *.zip
-!test_cmd_plugin-v2.0.0.zip
-
-# 示例生成的测试插件（保留作示例）
-# test_hello/
-# test_cmd_plugin/
-# test_action_plugin/
+test_cmd_plugin/
+test_action_plugin/
+test_hello/
+test_hello.mai
 
 # 虚拟环境
 .venv/

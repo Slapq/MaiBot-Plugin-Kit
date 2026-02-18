@@ -4,7 +4,7 @@ export default defineConfig({
   title: 'MaiBot Plugin Kit',
   description: '麦麦插件开发工具包 - 完整文档',
   lang: 'zh-CN',
-  base: '/',
+  base: '/maikit/',
   
   head: [
     ['meta', { charset: 'utf-8' }],
