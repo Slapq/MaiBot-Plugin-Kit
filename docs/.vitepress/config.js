@@ -4,6 +4,7 @@ export default defineConfig({
   title: 'MaiBot Plugin Kit',
   description: '麦麦插件开发工具包 - 完整文档',
   lang: 'zh-CN',
+  base: '/MaiBot-Plugin-Kit/',
   themeConfig: {
     nav: [
       { text: '首页', link: '/' },

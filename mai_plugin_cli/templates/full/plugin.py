@@ -133,13 +133,29 @@ class {{ClassName}}Tool(BaseTool):
 #  EventHandler 组件：监听系统事件
 # ═══════════════════════════════════════════════
 
-class {{ClassName}}EventHandler(BaseEventHandler):
+class {{ClassName}}StartHandler(BaseEventHandler):
     """
-    事件处理组件
+    启动事件处理组件 - MaiBot 启动时触发一次（连接数据库、初始化资源等）
 
     event_type 可选：
+    - EventType.ON_START    : MaiBot 启动时触发（全局初始化）
+    - EventType.ON_STOP     : MaiBot 停止时触发（清理资源）
     - EventType.ON_MESSAGE  : 每条消息触发
     """
+
+    event_type = EventType.ON_START
+    handler_name = "{{plugin_name}}_start_handler"
+    handler_description = "启动事件处理器"
+
+    async def execute(self, message: Optional[Any]) -> Tuple[bool, bool, Optional[str], None, None]:
+        """ON_START 执行逻辑（message 参数在启动事件时为 None）"""
+        logger.info(f"[{{plugin_name}}] 插件已启动，执行初始化...")
+        # 在这里进行启动初始化（连接外部服务、预加载数据等）
+        return True, True, None, None, None
+
+
+class {{ClassName}}EventHandler(BaseEventHandler):
+    """消息事件处理组件 - 每条消息触发"""
 
     event_type = EventType.ON_MESSAGE
     handler_name = "{{plugin_name}}_handler"
@@ -147,10 +163,11 @@ class {{ClassName}}EventHandler(BaseEventHandler):
 
     async def execute(self, message: Optional[MaiMessages]) -> Tuple[bool, bool, Optional[str], None, None]:
         """
-        EventHandler 执行逻辑
+        ON_MESSAGE 执行逻辑
 
         返回 Tuple[bool, bool, str|None, None, None]
             → (是否成功, 是否继续传递事件, 日志描述, None, None)
+        第二个 bool 为 False 时会拦截该消息，不再传递给其他 Handler。
         """
         if not message:
             return True, True, None, None, None
@@ -158,7 +175,6 @@ class {{ClassName}}EventHandler(BaseEventHandler):
         # 在这里处理每条消息
         # logger.debug(f"[{{plugin_name}}] 收到消息: {message.plain_text}")
 
-        # 返回 True, True 表示成功且继续传递给其他 handler
         return True, True, None, None, None
 
 
@@ -203,6 +219,8 @@ class {{ClassName}}Plugin(BasePlugin):
             ({{ClassName}}Command.get_command_info(), {{ClassName}}Command),
             # 注册 Tool（如不需要可删除）
             ({{ClassName}}Tool.get_tool_info(), {{ClassName}}Tool),
-            # 注册 EventHandler（如不需要可删除）
+            # 注册 启动 EventHandler（如不需要可删除）
+            ({{ClassName}}StartHandler.get_handler_info(), {{ClassName}}StartHandler),
+            # 注册 消息 EventHandler（如不需要可删除）
             ({{ClassName}}EventHandler.get_handler_info(), {{ClassName}}EventHandler),
         ]

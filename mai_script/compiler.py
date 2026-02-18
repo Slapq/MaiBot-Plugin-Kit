@@ -211,6 +211,9 @@ class MaiScriptCompiler:
         if config:
             lines.append(f'    ConfigField,')
         lines.append(f')')
+        lines.append(f'from src.common.logger import get_logger')
+        lines.append(f'')
+        lines.append(f'logger = get_logger("{internal_name}")')
         lines.append(f'')
 
         # 检查是否需要 http 支持
@@ -276,7 +279,7 @@ class MaiScriptCompiler:
             lines.append(f'            if "reply" in dir():')
             lines.append(f'                await self.send_text(str(reply))')
             lines.append(f'        except Exception as e:')
-            lines.append(f'            self.logger.error(f"[{class_name}] 执行失败：{{e}}")')
+            lines.append(f'            logger.error(f"[{class_name}] 执行失败：{{e}}")')
             lines.append(f'            await self.send_text(f"❌ 执行失败：{{str(e)}}")')
 
         elif cmd_type == "http_get":
@@ -359,7 +362,7 @@ class MaiScriptCompiler:
             lines.append(f'            if "reply" in dir():')
             lines.append(f'                await self.send_text(str(reply))')
             lines.append(f'        except Exception as e:')
-            lines.append(f'            self.logger.error(f"[{class_name}] 执行失败：{{e}}")')
+            lines.append(f'            logger.error(f"[{class_name}] 执行失败：{{e}}")')
             lines.append(f'            return False, str(e)')
             lines.append(f'        return True, "{act["name"]} 执行成功"')
 
@@ -395,7 +398,7 @@ class MaiScriptCompiler:
             lines.append(f'                    if reply_type == "text":')
             lines.append(f'                        await self.send_text(reply_content)')
             lines.append(f'        except Exception as e:')
-            lines.append(f'            self.logger.error(f"执行失败：{{e}}")')
+            lines.append(f'            logger.error(f"执行失败：{{e}}")')
             lines.append(f'            return False, str(e)')
             lines.append(f'        return True, "{act["name"]} 执行成功"')
 
@@ -467,25 +470,24 @@ class MaiScriptCompiler:
         lines = []
         # 检查是否有 {user_name} 类的变量
         vars_in_reply = re.findall(r'\{(\w+)\}', reply)
-        
-        if "user_name" in vars_in_reply:
-            lines.append(f'{indent}user_name = getattr(self, "sender_name", "朋友")')
-        
-        # 提取正则参数
-        param_vars = [v for v in vars_in_reply if v not in ("user_name",)]
-        for i, pv in enumerate(param_vars):
-            lines.append(f'{indent}{pv} = self.matched.group({i+1}) if self.matched else ""')
 
-        # 转义大括号（除了变量）
+        if "user_name" in vars_in_reply:
+            lines.append(f'{indent}user_name = getattr(self.message, "sender_nickname", "朋友") if hasattr(self, "message") and self.message else "朋友"')
+
+        # 从 self.matched_groups 提取命名捕获组参数（正确用法）
+        param_vars = [v for v in vars_in_reply if v not in ("user_name",)]
+        for pv in param_vars:
+            lines.append(f'{indent}{pv} = self.matched_groups.get("{pv}", "")')
+
         lines.append(f'{indent}await self.send_text(f"{reply}")')
         return lines
 
     def _gen_param_extract_code(self, url: str, indent: str, pattern: str) -> List[str]:
-        """生成 URL 中参数提取的代码"""
+        """生成 URL 中参数提取的代码（从 matched_groups 取命名组）"""
         lines = []
         params = re.findall(r'\{(\w+)\}', url)
-        for i, param in enumerate(params):
-            lines.append(f'{indent}{param} = self.matched.group({i+1}) if self.matched else ""')
+        for param in params:
+            lines.append(f'{indent}{param} = self.matched_groups.get("{param}", "")')
         return lines
 
     def _write_config_note(self, output_dir: Path, config: Dict):
